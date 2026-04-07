@@ -1,6 +1,7 @@
 fastapi
-uvicorn[standard]
-opencv-python-headless
+uvicorn
 python-multipart
-requests
 numpy
+opencv-python-headless
+libsql-client
+face-recognition
