@@ -1,5 +1,6 @@
 import os
 import io
+import json
 import numpy as np
 import face_recognition
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
@@ -15,22 +16,25 @@ security = HTTPBearer()
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     expected_token = os.environ.get("ATTENDANCE_TOKEN")
     if not expected_token or credentials.credentials != expected_token:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Unauthorized")
     return credentials.credentials
 
 @app.get("/")
 def root():
-    return {"status": "online", "engine": "Local Dlib", "database": "Turso Global"}
+    return {"status": "online", "database": "Turso Cloud", "engine": "Local face_recognition"}
 
 @app.post("/register")
 async def register(name: str = Form(), rfid: str = Form(), image: UploadFile = File(), token: str = Depends(verify_token)):
     img_bytes = await image.read()
+    # Load image directly from bytes
     img = face_recognition.load_image_file(io.BytesIO(img_bytes))
     encodings = face_recognition.face_encodings(img)
 
     if not encodings:
         raise HTTPException(status_code=400, detail="No face detected.")
-    
+    if len(encodings) > 1:
+        raise HTTPException(status_code=400, detail="Multiple faces detected.")
+
     database.save_user(name, rfid, encodings[0])
     return {"status": "success", "message": f"{name} registered."}
 
@@ -43,36 +47,44 @@ async def verify(rfid: str = Form(""), image: UploadFile = File(), token: str = 
     if not unknown_enc:
         raise HTTPException(status_code=400, detail="No face detected.")
 
-    # 1. OPTIMIZATION: Check specific user if RFID is provided
+    matched_name = None
+    best_distance = 1.0
+
+    # Optimization: If RFID is provided, check that specific user first
     if rfid:
         user = database.get_user_by_rfid(rfid)
         if user:
-            name, _, stored_enc = user
+            name, stored_rfid, stored_enc = user
             distance = np.linalg.norm(stored_enc - unknown_enc[0])
             if distance < THRESHOLD:
-                database.log_attendance(name, rfid)
+                matched_name = name
+                best_distance = float(distance)
+                database.log_attendance(matched_name, rfid)
                 return {
-                    "status": "success", 
-                    "name": name, 
+                    "status": "success",
+                    "name": matched_name,
                     "mode": "verification",
-                    "confidence": f"{round((1 - float(distance)) * 100, 1)}%"
+                    "confidence": f"{round((1 - best_distance) * 100, 1)}%"
                 }
 
-    # 2. FALLBACK: Global Scan (Recognition mode)
+    # Fallback or Global Scan: Search all users
     users = database.get_all_users()
     if not users:
         return {"status": "error", "message": "No users registered."}
 
+    # Extract stored data
     names = [u[0] for u in users]
     stored_encs = [u[2] for u in users]
-    
-    # Standard Euclidean distance comparison
+
+    # Manual distance calculation (Euclidean)
     distances = np.linalg.norm(np.array(stored_encs) - unknown_enc[0], axis=1)
     best_idx = int(np.argmin(distances))
     best_distance = float(distances[best_idx])
-    
+
     if best_distance < THRESHOLD:
         matched_name = names[best_idx]
+        # Use the provided RFID if available, otherwise use the one from DB (though database.log_attendance takes rfid)
+        # In recognition mode, we might not have the RFID if it wasn't sent
         matched_rfid = rfid if rfid else users[best_idx][1]
         database.log_attendance(matched_name, matched_rfid)
         return {

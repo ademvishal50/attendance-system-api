@@ -2,4 +2,6 @@ fastapi
 uvicorn
 python-multipart
 numpy
+opencv-python-headless
 libsql-client
+face-recognition
