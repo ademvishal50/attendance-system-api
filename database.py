@@ -14,9 +14,19 @@ def get_client():
     return libsql_client.create_client_sync(url=URL, auth_token=TOKEN)
 
 def init_db():
-    with get_client() as client:
-        client.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, rfid TEXT UNIQUE, encoding TEXT)")
-        client.execute("CREATE TABLE IF NOT EXISTS attendance (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, rfid TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
+    print("Initializing Database...")
+    if not URL or not TOKEN:
+        print("ERROR: Database credentials missing! URL and TOKEN must be set.")
+        return
+    
+    try:
+        with get_client() as client:
+            client.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, rfid TEXT UNIQUE, encoding TEXT)")
+            client.execute("CREATE TABLE IF NOT EXISTS attendance (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, rfid TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
+            print("Database initialized successfully.")
+    except Exception as e:
+        print(f"DATABASE INITIALIZATION ERROR: {e}")
+
 
 def save_user(name, rfid, encoding):
     # Convert numpy array to list then to JSON string for storage

@@ -8,7 +8,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import database
 
 app = FastAPI(title="Global Attendance API")
-database.init_db()
 
 THRESHOLD = 0.4
 security = HTTPBearer()
@@ -19,9 +18,25 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         raise HTTPException(status_code=401, detail="Unauthorized")
     return credentials.credentials
 
+@app.on_event("startup")
+async def startup_event():
+    print("=== Application Startup ===")
+    print(f"Turso URL Set: {'Yes' if os.environ.get('TURSO_URL') else 'No'}")
+    print(f"Turso Token Set: {'Yes' if os.environ.get('TURSO_TOKEN') else 'No'}")
+    print(f"Attendance Token Set: {'Yes' if os.environ.get('ATTENDANCE_TOKEN') else 'No'}")
+    database.init_db()
+    print("===========================")
+
 @app.get("/")
 def root():
-    return {"status": "online", "database": "Turso Cloud", "engine": "Local face_recognition"}
+    return {
+        "status": "online", 
+        "database": "Turso Cloud", 
+        "engine": "Local face_recognition",
+        "configured": os.environ.get("TURSO_URL") is not None
+    }
+
+
 
 @app.post("/register")
 async def register(name: str = Form(), rfid: str = Form(), image: UploadFile = File(), token: str = Depends(verify_token)):
