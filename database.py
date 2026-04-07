@@ -1,14 +1,21 @@
 import os, sqlite3, json, numpy as np
 
-# ─── Database Path (Persistent Storage) ───────────────────────
+# ─── Database Path (Handles Persistent Storage Automatically) ──
+# Hugging Face provides persistent storage at /data if enabled in settings.
+# This approach works both locally (ephemeral) and on HF (persistent).
 DATA_DIR = "/data"
 if os.path.isdir(DATA_DIR) and os.access(DATA_DIR, os.W_OK):
-    DB = os.path.join(DATA_DIR, "attendance.db")   
+    DB = os.path.join(DATA_DIR, "attendance.db")
+    STORAGE_MODE = "Persistent (Hugging Face)"
 else:
-    DB = "attendance.db"                            
+    DB = "attendance.db"
+    STORAGE_MODE = "Ephemeral (Local/Container)"
 
-print(f"[DB] Using: {DB}")
+print(f"[DB] Storage Mode: {STORAGE_MODE}")
+print(f"[DB] Current Path: {DB}")
 # ──────────────────────────────────────────────────────────────
+
+
 
 
 def init_db():

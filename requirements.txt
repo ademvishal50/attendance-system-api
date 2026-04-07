@@ -1,4 +1,6 @@
 fastapi
-uvicorn
+uvicorn[standard]
 opencv-python-headless
 python-multipart
+requests
+numpy
