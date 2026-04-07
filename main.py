@@ -47,6 +47,27 @@ async def verify(rfid: str = Form(""), image: UploadFile = File(), token: str = 
     if not unknown_enc:
         raise HTTPException(status_code=400, detail="No face detected.")
 
+    matched_name = None
+    best_distance = 1.0
+
+    # Optimization: If RFID is provided, check that specific user first
+    if rfid:
+        user = database.get_user_by_rfid(rfid)
+        if user:
+            name, stored_rfid, stored_enc = user
+            distance = np.linalg.norm(stored_enc - unknown_enc[0])
+            if distance < THRESHOLD:
+                matched_name = name
+                best_distance = float(distance)
+                database.log_attendance(matched_name, rfid)
+                return {
+                    "status": "success",
+                    "name": matched_name,
+                    "mode": "verification",
+                    "confidence": f"{round((1 - best_distance) * 100, 1)}%"
+                }
+
+    # Fallback or Global Scan: Search all users
     users = database.get_all_users()
     if not users:
         return {"status": "error", "message": "No users registered."}
@@ -62,10 +83,14 @@ async def verify(rfid: str = Form(""), image: UploadFile = File(), token: str = 
 
     if best_distance < THRESHOLD:
         matched_name = names[best_idx]
-        database.log_attendance(matched_name, rfid)
+        # Use the provided RFID if available, otherwise use the one from DB (though database.log_attendance takes rfid)
+        # In recognition mode, we might not have the RFID if it wasn't sent
+        matched_rfid = rfid if rfid else users[best_idx][1]
+        database.log_attendance(matched_name, matched_rfid)
         return {
             "status": "success", 
             "name": matched_name, 
+            "mode": "recognition",
             "confidence": f"{round((1 - best_distance) * 100, 1)}%"
         }
 
