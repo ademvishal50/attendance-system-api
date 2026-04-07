@@ -29,11 +29,11 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
 @app.on_event("startup")
 async def startup_event():
     print("=== Application Startup ===", flush=True)
-    print(f"Turso URL Set: {'Yes' if os.environ.get('TURSO_URL') else 'No'}", flush=True)
-    print(f"Turso Token Set: {'Yes' if os.environ.get('TURSO_TOKEN') else 'No'}", flush=True)
+    print("Turso Mode: Direct (hardcoded)", flush=True)
     print(f"Attendance Token Set: {'Yes' if os.environ.get('ATTENDANCE_TOKEN') else 'No'}", flush=True)
     database.init_db()
     print("===========================", flush=True)
+
 
 
 @app.get("/")
