@@ -1,11 +1,12 @@
 ---
 title: Attendance Api
-emoji: 📉
-colorFrom: red
-colorTo: red
+emoji: 🏃
+colorFrom: purple
+colorTo: gray
 sdk: docker
 pinned: false
-short_description: Attendance System
+license: mit
+short_description: Attendance System using Face Recognition
 ---
 
 Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
