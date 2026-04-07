@@ -17,9 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# 2. Install dlib using a pre-built wheel for Python 3.10 (Linux x86_64)
-# This skips the 20-minute "Building wheel for dlib" step entirely
-RUN pip install --no-cache-dir https://github.com/z-mawa/dlib-pypi/raw/main/dlib-19.24.1-cp310-cp310-linux_x86_64.whl
+# 2. Install dlib using pre-built binaries to skip the 20-minute compilation
+RUN pip install --no-cache-dir dlib-bin
+
 
 # 3. Install the rest of your project requirements
 COPY requirements.txt .
