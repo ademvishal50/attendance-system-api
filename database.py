@@ -1,62 +1,44 @@
-import os, sqlite3, json, numpy as np, time
+import os, sqlite3, json, numpy as np
 
 # ─── Database Path (Handles Persistent Storage Automatically) ──
+# Hugging Face provides persistent storage at /data if enabled in settings.
+# This approach works both locally (ephemeral) and on HF (persistent).
 DATA_DIR = "/data"
-if os.path.exists(DATA_DIR) and os.access(DATA_DIR, os.W_OK):
+if os.path.isdir(DATA_DIR) and os.access(DATA_DIR, os.W_OK):
     DB = os.path.join(DATA_DIR, "attendance.db")
-    STORAGE_MODE = "Persistent (Hugging Face /data)"
+    STORAGE_MODE = "Persistent (Hugging Face)"
 else:
     DB = "attendance.db"
     STORAGE_MODE = "Ephemeral (Local/Container)"
 
-print(f"[DB] Initial Storage Mode: {STORAGE_MODE}")
-print(f"[DB] Initial Path: {DB}")
+print(f"[DB] Storage Mode: {STORAGE_MODE}")
+print(f"[DB] Current Path: {DB}")
 # ──────────────────────────────────────────────────────────────
 
-def init_db():
-    global DB, STORAGE_MODE
-    # Sometimes it takes a moment for the HF volume to be fully ready
-    if DB.startswith("/data"):
-        time.sleep(2) 
-        
-    try:
-        # Create directory if it doesn't exist (e.g. if we are on a fresh /data mount)
-        dir_name = os.path.dirname(DB)
-        if dir_name and not os.path.exists(dir_name):
-            os.makedirs(dir_name, exist_ok=True)
-            
-        print(f"[DB] Attempting to initialize at: {DB}...")
-        conn = sqlite3.connect(DB)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id       INTEGER PRIMARY KEY AUTOINCREMENT,
-                name     TEXT,
-                rfid     TEXT,
-                encoding TEXT
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS attendance (
-                id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                name      TEXT,
-                rfid      TEXT,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        conn.commit()
-        conn.close()
-        print(f"[DB] Successfully initialized database.")
-    except Exception as e:
-        print(f"[ERROR] Could not initialize database at {DB}: {e}")
-        if DB.startswith("/data"):
-            print(f"[FALLBACK] Switching to ephemeral storage in the local folder.")
-            DB = "attendance.db"
-            STORAGE_MODE = "Ephemeral (Fallback due to error)"
-            init_db() # Recursively initialize locally
-        else:
-            print("[FATAL] Local database initialization also failed.")
-            raise e
 
+
+
+def init_db():
+    os.makedirs(os.path.dirname(DB) or ".", exist_ok=True)
+    conn = sqlite3.connect(DB)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            name     TEXT,
+            rfid     TEXT,
+            encoding TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS attendance (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            name      TEXT,
+            rfid      TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
 
 
 def save_user(name, rfid, encoding):

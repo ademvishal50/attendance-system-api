@@ -1,19 +1,23 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
+import requests
 import os
 import sqlite3
 import json
 import database
 import numpy as np
 import cv2
-import face_recognition
 
 app = FastAPI(title="Attendance API")
 database.init_db()
 
 # ─── Configuration ───────────────────────────────────────────
 THRESHOLD = 0.4
+# External Face Recognition API URL (defaults to a generic placeholder if not set)
+RECOGNITION_API_URL = os.environ.get("RECOGNITION_API_URL", "")
+# Token for the external API if needed
+RECOGNITION_API_TOKEN = os.environ.get("RECOGNITION_API_TOKEN", "")
 # ──────────────────────────────────────────────────────────────
 
 # ─── Bearer Token Security ────────────────────────────────────
@@ -33,6 +37,33 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         )
     return credentials.credentials
 
+async def get_encoding_from_api(image_bytes: bytes):
+    """Sends image to external API to get face encodings."""
+    if not RECOGNITION_API_URL:
+        raise HTTPException(
+            status_code=500,
+            detail="RECOGNITION_API_URL is not configured in environment variables."
+        )
+    
+    try:
+        # Assuming the API takes an 'image' file field
+        files = {"image": ("image.jpg", image_bytes, "image/jpeg")}
+        headers = {}
+        if RECOGNITION_API_TOKEN:
+            headers["Authorization"] = f"Bearer {RECOGNITION_API_TOKEN}"
+            
+        response = requests.post(RECOGNITION_API_URL, files=files, headers=headers, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Most APIs return a list of encodings: {"encodings": [[...]]}
+        encodings = data.get("encodings", [])
+        return [np.array(e) for e in encodings]
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error calling Face Recognition API: {str(e)}"
+        )
 
 # ─── Health Check (public - no token needed) ─────────────────
 @app.get("/")
@@ -43,11 +74,13 @@ def root():
         "message": "Attendance API is ready!",
         "database": {
             "path": database.DB,
-            "mode": getattr(database, "STORAGE_MODE", "Unknown"),
             "exists": os.path.exists(database.DB)
         },
-        "recognition": "Running locally via face_recognition library",
-        "instruction": "Ensure ATTENDANCE_TOKEN is set in your Space's environment variables."
+        "recognition": {
+            "api_url": RECOGNITION_API_URL or "NOT_CONFIGURED",
+            "api_configured": bool(RECOGNITION_API_URL)
+        },
+        "instruction": "Set RECOGNITION_API_URL and ATTENDANCE_TOKEN in your Space's environment variables."
     }
 
 
@@ -61,13 +94,8 @@ async def register(
 ):
     img_bytes = await image.read()
     
-    # Process image natively
-    img = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
-    if img is None:
-        raise HTTPException(status_code=400, detail="Invalid image file in upload.")
-
-    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    encodings = face_recognition.face_encodings(rgb)
+    # Get encodings from API instead of local library
+    encodings = await get_encoding_from_api(img_bytes)
 
     if not encodings:
         raise HTTPException(status_code=400, detail="No face detected in the uploaded photo.")
@@ -87,13 +115,8 @@ async def verify(
 ):
     img_bytes = await image.read()
     
-    # Process image natively
-    img = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
-    if img is None:
-        raise HTTPException(status_code=400, detail="Invalid image file")
-
-    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    encodings = face_recognition.face_encodings(rgb)
+    # Get encodings from API instead of local library
+    encodings = await get_encoding_from_api(img_bytes)
 
     if not encodings:
         raise HTTPException(status_code=400, detail="No face detected in image")
@@ -107,8 +130,9 @@ async def verify(
     names = [u[0] for u in users]
     stored_encs = [u[2] for u in users]
 
-    # Calculate distance using face_recognition package
-    distances = face_recognition.face_distance(stored_encs, unknown_enc)
+    # Calculate distances manually using numpy (Euclidean distance)
+    # Equivalent to face_recognition.face_distance
+    distances = np.linalg.norm(np.array(stored_encs) - unknown_enc, axis=1)
     
     best_idx = int(np.argmin(distances))
     best_distance = float(distances[best_idx])
@@ -129,6 +153,7 @@ async def verify(
         "closest_distance": round(best_distance, 4),
         "threshold": THRESHOLD
     }
+
 
 # ─── List all registered students ────────────────────────────
 @app.get("/students")
