@@ -74,14 +74,17 @@ def root():
         "message": "Attendance API is ready!",
         "database": {
             "path": database.DB,
+            "mode": getattr(database, "STORAGE_MODE", "Unknown"),
             "exists": os.path.exists(database.DB)
         },
         "recognition": {
             "api_url": RECOGNITION_API_URL or "NOT_CONFIGURED",
             "api_configured": bool(RECOGNITION_API_URL)
         },
-        "instruction": "Set RECOGNITION_API_URL and ATTENDANCE_TOKEN in your Space's environment variables."
+        "instruction": "Set RECOGNITION_API_URL and ATTENDANCE_TOKEN in your Space's environment variables. "
+                       "Enable Persistent Storage in Space settings to use /data."
     }
+
 
 
 # ─── Register ────────────────────────────────────────────────
