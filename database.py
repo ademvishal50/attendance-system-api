@@ -8,24 +8,25 @@ URL = os.environ.get("TURSO_URL")
 TOKEN = os.environ.get("TURSO_TOKEN")
 
 if not URL or not TOKEN:
-    print("WARNING: TURSO_URL or TURSO_TOKEN environment variables are not set.")
+    print("WARNING: TURSO_URL or TURSO_TOKEN environment variables are not set.", flush=True)
 
 def get_client():
     return libsql_client.create_client_sync(url=URL, auth_token=TOKEN)
 
 def init_db():
-    print("Initializing Database...")
+    print("Initializing Database...", flush=True)
     if not URL or not TOKEN:
-        print("ERROR: Database credentials missing! URL and TOKEN must be set.")
+        print("ERROR: Database credentials missing! URL and TOKEN must be set.", flush=True)
         return
     
     try:
         with get_client() as client:
             client.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, rfid TEXT UNIQUE, encoding TEXT)")
             client.execute("CREATE TABLE IF NOT EXISTS attendance (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, rfid TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
-            print("Database initialized successfully.")
+            print("Database initialized successfully.", flush=True)
     except Exception as e:
-        print(f"DATABASE INITIALIZATION ERROR: {e}")
+        print(f"DATABASE INITIALIZATION ERROR: {e}", flush=True)
+
 
 
 def save_user(name, rfid, encoding):

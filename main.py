@@ -1,8 +1,16 @@
 import os
+import sys
+
+# Early log to confirm the script is starting
+print(">>> FASTAPI STARTING...", flush=True)
+
 import io
 import json
 import numpy as np
+print(">>> Loading face_recognition (this may take a moment)...", flush=True)
 import face_recognition
+print(">>> Imports completed.", flush=True)
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import database
@@ -20,12 +28,13 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
 
 @app.on_event("startup")
 async def startup_event():
-    print("=== Application Startup ===")
-    print(f"Turso URL Set: {'Yes' if os.environ.get('TURSO_URL') else 'No'}")
-    print(f"Turso Token Set: {'Yes' if os.environ.get('TURSO_TOKEN') else 'No'}")
-    print(f"Attendance Token Set: {'Yes' if os.environ.get('ATTENDANCE_TOKEN') else 'No'}")
+    print("=== Application Startup ===", flush=True)
+    print(f"Turso URL Set: {'Yes' if os.environ.get('TURSO_URL') else 'No'}", flush=True)
+    print(f"Turso Token Set: {'Yes' if os.environ.get('TURSO_TOKEN') else 'No'}", flush=True)
+    print(f"Attendance Token Set: {'Yes' if os.environ.get('ATTENDANCE_TOKEN') else 'No'}", flush=True)
     database.init_db()
-    print("===========================")
+    print("===========================", flush=True)
+
 
 @app.get("/")
 def root():
