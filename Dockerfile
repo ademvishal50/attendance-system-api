@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libopenblas-dev \
     liblapack-dev \
     libx11-dev \
-    libgl1 \
+    libgl1-mesa-glx \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -34,4 +34,5 @@ COPY . .
 # Hugging Face Spaces port
 EXPOSE 7860
 
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860", "--log-level", "debug"]
+# Diagnostic CMD: List files, test import, then start server
+CMD ls -R /app && python -c "import main; print('PRE-START CHECK: Main imported OK')" && python -m uvicorn main:app --host 0.0.0.0 --port 7860 --log-level debug
