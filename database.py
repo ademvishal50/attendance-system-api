@@ -1,76 +1,109 @@
-import os
-import json
-import numpy as np
-import libsql_client
+import os, sqlite3, json, numpy as np
 
-# Get these from Hugging Face Secrets (Settings tab)
-# Direct connection for stability
-URL = "libsql://attendance-db-ademvishal50.aws-ap-south-1.turso.io"
-TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzU1NzQ1NDIsImlkIjoiMDE5ZDY4N2MtY2UwMS03YjFmLTg3NzgtNDMzZDQ2MzhlYzhmIiwicmlkIjoiYzEyNTM5MDgtOGJiYS00YTk2LWI4N2MtNDZlZTFiMzk0NzQ4In0.HRQ6V4vp2GwL5bFd3WgVD8NFotsvTpi2aqMWBNX9GCRhnfMccKkizgOOFtLSmIw5IxXOny28MyqkJggwi9sXBg"
+# ─── Database Path (Persistent Storage) ───────────────────────
+DATA_DIR = "/data"
+if os.path.isdir(DATA_DIR) and os.access(DATA_DIR, os.W_OK):
+    DB = os.path.join(DATA_DIR, "attendance.db")   
+else:
+    DB = "attendance.db"                            
 
+print(f"[DB] Using: {DB}")
+# ──────────────────────────────────────────────────────────────
 
-def get_client():
-    return libsql_client.create_client_sync(url=URL, auth_token=TOKEN)
 
 def init_db():
-    print("Initializing Database...", flush=True)
-    if not URL or not TOKEN:
-        print("ERROR: Database credentials missing! URL and TOKEN must be set.", flush=True)
-        return
-    
-    try:
-        with get_client() as client:
-            client.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, rfid TEXT UNIQUE, encoding TEXT)")
-            client.execute("CREATE TABLE IF NOT EXISTS attendance (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, rfid TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
-            print("Database initialized successfully.", flush=True)
-    except Exception as e:
-        print(f"DATABASE INITIALIZATION ERROR: {e}", flush=True)
-
+    os.makedirs(os.path.dirname(DB) or ".", exist_ok=True)
+    conn = sqlite3.connect(DB)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            name     TEXT,
+            rfid     TEXT,
+            encoding TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS attendance (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            name      TEXT,
+            rfid      TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
 
 
 def save_user(name, rfid, encoding):
-    # Convert numpy array to list then to JSON string for storage
-    enc_json = json.dumps(encoding.tolist())
-    with get_client() as client:
-        client.execute("INSERT OR REPLACE INTO users (name, rfid, encoding) VALUES (?, ?, ?)", (name, rfid, enc_json))
+    conn = sqlite3.connect(DB)
+    conn.execute(
+        "INSERT INTO users (name, rfid, encoding) VALUES (?, ?, ?)",
+        (name, rfid, json.dumps(encoding.tolist()))
+    )
+    conn.commit()
+    conn.close()
+
 
 def get_all_users():
-    with get_client() as client:
-        result = client.execute("SELECT name, rfid, encoding FROM users")
-        # Convert JSON strings back to numpy arrays
-        return [(r[0], r[1], np.array(json.loads(r[2]))) for r in result.rows]
+    conn = sqlite3.connect(DB)
+    rows = conn.execute("SELECT name, rfid, encoding FROM users").fetchall()
+    conn.close()
+    return [(r[0], r[1], np.array(json.loads(r[2]))) for r in rows]
 
-def get_user_by_rfid(rfid):
-    with get_client() as client:
-        result = client.execute("SELECT name, rfid, encoding FROM users WHERE rfid = ?", (rfid,))
-        if result.rows:
-            r = result.rows[0]
-            return (r[0], r[1], np.array(json.loads(r[2])))
-        return None
 
 def get_all_user_names():
-    with get_client() as client:
-        result = client.execute("SELECT id, name, rfid FROM users")
-        return [{"id": r[0], "name": r[1], "rfid": r[2]} for r in result.rows]
+    conn = sqlite3.connect(DB)
+    rows = conn.execute("SELECT id, name, rfid FROM users").fetchall()
+    conn.close()
+    return [{"id": r[0], "name": r[1], "rfid": r[2]} for r in rows]
 
-def log_attendance(name, rfid):
-    with get_client() as client:
-        client.execute("INSERT INTO attendance (name, rfid) VALUES (?, ?)", (name, rfid))
 
-def get_attendance():
-    with get_client() as client:
-        result = client.execute("SELECT name, rfid, timestamp FROM attendance ORDER BY timestamp DESC LIMIT 50")
-        return [{"name": r[0], "rfid": r[1], "time": r[2]} for r in result.rows]
+def delete_user_by_name(name):
+    conn = sqlite3.connect(DB)
+    cursor = conn.execute("DELETE FROM users WHERE name = ?", (name,))
+    deleted = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return deleted
+
 
 def delete_user_by_id(user_id):
-    with get_client() as client:
-        res = client.execute("DELETE FROM users WHERE id = ?", (user_id,))
-        return res.rows_affected
+    conn = sqlite3.connect(DB)
+    cursor = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    deleted = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return deleted
+
 
 def delete_all_users():
-    with get_client() as client:
-        client.execute("DELETE FROM users")
+    conn = sqlite3.connect(DB)
+    conn.execute("DELETE FROM users")
+    conn.commit()
+    conn.close()
+
+
+def log_attendance(name, rfid):
+    conn = sqlite3.connect(DB)
+    conn.execute(
+        "INSERT INTO attendance (name, rfid) VALUES (?, ?)",
+        (name, rfid)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_attendance():
+    conn = sqlite3.connect(DB)
+    rows = conn.execute(
+        "SELECT name, rfid, timestamp FROM attendance ORDER BY timestamp DESC LIMIT 50"
+    ).fetchall()
+    conn.close()
+    return [{"name": r[0], "rfid": r[1], "time": r[2]} for r in rows]
+
 
 def delete_all_attendance():
-    with get_client() as client:
-        client.execute("DELETE FROM attendance")
+    conn = sqlite3.connect(DB)
+    conn.execute("DELETE FROM attendance")
+    conn.commit()
+    conn.close()
