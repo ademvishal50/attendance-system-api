@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Create a non-root user for Hugging Face compatibility (UID 1000)
+# 2. Create a non-root user for security and cloud compatibility (UID 1000)
 RUN useradd -m -u 1000 user
 USER user
 ENV HOME=/home/user \
@@ -31,15 +31,14 @@ RUN pip install --no-cache-dir --user face-recognition-models Click Pillow reque
 
 # 4. Install the rest of your project requirements
 COPY --chown=user requirements.txt .
-# We remove face-recognition from requirements.txt as it's already installed manually above
 RUN sed -i '/face-recognition/d' requirements.txt && \
     pip install --no-cache-dir --user -r requirements.txt
 
 # 5. Copy your main.py and database.py with correct ownership
 COPY --chown=user . .
 
-# Hugging Face Spaces port
+# Cloud service port (Hugging Face / Render / Railway default)
 EXPOSE 7860
 
-# Diagnostic CMD: List files, test import, then start server
-CMD ls -la && python3 -c "import main; print('PRE-START CHECK: Main imported OK')" && python3 -m uvicorn main:app --host 0.0.0.0 --port 7860 --log-level debug
+# Regular start command
+CMD ["python3", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]

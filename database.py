@@ -3,33 +3,22 @@ import json
 import numpy as np
 import libsql_client
 
-# Get these from Hugging Face Secrets (Settings tab)
 # Direct connection for stability
 URL = "libsql://attendance-db-ademvishal50.aws-ap-south-1.turso.io"
 TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzU1NzQ1NDIsImlkIjoiMDE5ZDY4N2MtY2UwMS03YjFmLTg3NzgtNDMzZDQ2MzhlYzhmIiwicmlkIjoiYzEyNTM5MDgtOGJiYS00YTk2LWI4N2MtNDZlZTFiMzk0NzQ4In0.HRQ6V4vp2GwL5bFd3WgVD8NFotsvTpi2aqMWBNX9GCRhnfMccKkizgOOFtLSmIw5IxXOny28MyqkJggwi9sXBg"
-
 
 def get_client():
     return libsql_client.create_client_sync(url=URL, auth_token=TOKEN)
 
 def init_db():
-    print("Initializing Database...", flush=True)
-    if not URL or not TOKEN:
-        print("ERROR: Database credentials missing! URL and TOKEN must be set.", flush=True)
-        return
-    
     try:
         with get_client() as client:
             client.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, rfid TEXT UNIQUE, encoding TEXT)")
             client.execute("CREATE TABLE IF NOT EXISTS attendance (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, rfid TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)")
-            print("Database initialized successfully.", flush=True)
     except Exception as e:
-        print(f"DATABASE INITIALIZATION ERROR: {e}", flush=True)
-
-
+        print(f"DATABASE INIT ERROR: {e}")
 
 def save_user(name, rfid, encoding):
-    # Convert numpy array to list then to JSON string for storage
     enc_json = json.dumps(encoding.tolist())
     with get_client() as client:
         client.execute("INSERT OR REPLACE INTO users (name, rfid, encoding) VALUES (?, ?, ?)", (name, rfid, enc_json))
@@ -37,7 +26,6 @@ def save_user(name, rfid, encoding):
 def get_all_users():
     with get_client() as client:
         result = client.execute("SELECT name, rfid, encoding FROM users")
-        # Convert JSON strings back to numpy arrays
         return [(r[0], r[1], np.array(json.loads(r[2]))) for r in result.rows]
 
 def get_user_by_rfid(rfid):
