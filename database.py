@@ -1,15 +1,15 @@
 import os
 import json
 import numpy as np
-import libsql_client
+import libsql
 
 # Direct connection for stability
 URL = "https://attendance-db-ademvishal50.aws-ap-south-1.turso.io"
-
 TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzU1NzQ1NDIsImlkIjoiMDE5ZDY4N2MtY2UwMS03YjFmLTg3NzgtNDMzZDQ2MzhlYzhmIiwicmlkIjoiYzEyNTM5MDgtOGJiYS00YTk2LWI4N2MtNDZlZTFiMzk0NzQ4In0.HRQ6V4vp2GwL5bFd3WgVD8NFotsvTpi2aqMWBNX9GCRhnfMccKkizgOOFtLSmIw5IxXOny28MyqkJggwi9sXBg"
 
 def get_client():
-    return libsql_client.create_client_sync(url=URL, auth_token=TOKEN)
+    return libsql.connect(URL, auth_token=TOKEN)
+
 
 def init_db():
     try:

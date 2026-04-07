@@ -3,5 +3,6 @@ uvicorn
 python-multipart
 numpy
 opencv-python-headless
-libsql-client
+libsql
 face-recognition
+requests
