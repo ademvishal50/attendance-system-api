@@ -4,7 +4,8 @@ import numpy as np
 import libsql_client
 
 # Direct connection for stability
-URL = "libsql://attendance-db-ademvishal50.aws-ap-south-1.turso.io"
+URL = "https://attendance-db-ademvishal50.aws-ap-south-1.turso.io"
+
 TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzU1NzQ1NDIsImlkIjoiMDE5ZDY4N2MtY2UwMS03YjFmLTg3NzgtNDMzZDQ2MzhlYzhmIiwicmlkIjoiYzEyNTM5MDgtOGJiYS00YTk2LWI4N2MtNDZlZTFiMzk0NzQ4In0.HRQ6V4vp2GwL5bFd3WgVD8NFotsvTpi2aqMWBNX9GCRhnfMccKkizgOOFtLSmIw5IxXOny28MyqkJggwi9sXBg"
 
 def get_client():
