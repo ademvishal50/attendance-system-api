@@ -71,20 +71,24 @@ async def get_encoding_from_api(image_bytes: bytes):
 @app.get("/")
 def root():
     """Health check endpoint for Hugging Face and users."""
+    is_turso = getattr(database, "USE_TURSO", False)
+    db_mode = getattr(database, "STORAGE_MODE", "Unknown")
+    
     return {
         "status": "online",
         "message": "Attendance API is ready!",
         "database": {
-            "path": database.DB,
-            "mode": getattr(database, "STORAGE_MODE", "Unknown"),
-            "exists": os.path.exists(database.DB)
+            "type": "Turso (Remote)" if is_turso else "SQLite (Local)",
+            "mode": db_mode,
+            "target": getattr(database, "DB_DISPLAY", "Unknown"),
+            "has_libsql": getattr(database, "HAS_LIBSQL", False)
         },
-        "recognition": {
-            "api_url": RECOGNITION_API_URL or "NOT_CONFIGURED",
-            "api_configured": bool(RECOGNITION_API_URL)
+        "recognition_api": {
+            "url": RECOGNITION_API_URL or "NOT_CONFIGURED",
+            "status": "Ready" if RECOGNITION_API_URL else "Missing environment variable RECOGNITION_API_URL"
         },
-        "instruction": "Set RECOGNITION_API_URL and ATTENDANCE_TOKEN in your Space's environment variables. "
-                       "Enable Persistent Storage in Space settings to use /data."
+        "environment": "Production (Render)" if is_turso else "Local/Development",
+        "instruction": "Ensure TURSO_URL, TURSO_TOKEN, and RECOGNITION_API_URL are set in environment variables."
     }
 
 
@@ -258,7 +262,7 @@ def delete_all_attendance(token: str = Depends(verify_token)):
 # ─── Debug: view users ───────────────────────────────────────
 @app.get("/debug/users")
 def debug_users(token: str = Depends(verify_token)):
-    conn = sqlite3.connect(database.DB)     # ← uses persistent DB path
+    conn = database.get_db_conn()
     rows = conn.execute("SELECT id, name, rfid, encoding FROM users").fetchall()
     conn.close()
     return {

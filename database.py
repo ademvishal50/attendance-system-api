@@ -1,6 +1,18 @@
 import os, sqlite3, json, numpy as np, time
 
-# ─── Database Path (Handles Persistent Storage Automatically) ──
+# Try to import libsql for Turso support
+try:
+    import libsql
+    HAS_LIBSQL = True
+except ImportError:
+    HAS_LIBSQL = False
+
+# ─── Turso Configuration ───────────────────────────────────
+TURSO_URL = os.environ.get("TURSO_URL")
+TURSO_TOKEN = os.environ.get("TURSO_TOKEN")
+USE_TURSO = bool(TURSO_URL and TURSO_TOKEN and HAS_LIBSQL)
+
+# ─── Local Database Path (Fallback/Ephemeral) ──────────────
 DATA_DIR = "/data"
 if os.path.exists(DATA_DIR) and os.access(DATA_DIR, os.W_OK):
     DB = os.path.join(DATA_DIR, "attendance.db")
@@ -9,9 +21,22 @@ else:
     DB = "attendance.db"
     STORAGE_MODE = "Ephemeral (Local/Container)"
 
+if USE_TURSO:
+    STORAGE_MODE = "Turso Remote (Distributed)"
+    DB_DISPLAY = TURSO_URL
+else:
+    DB_DISPLAY = DB
+
 print(f"[DB] Initial Storage Mode: {STORAGE_MODE}")
-print(f"[DB] Initial Path: {DB}")
+print(f"[DB] Database Target: {DB_DISPLAY}")
 # ──────────────────────────────────────────────────────────────
+
+def get_db_conn():
+    """Helper to get either a Turso or SQLite connection."""
+    if USE_TURSO:
+        return libsql.connect(TURSO_URL, auth_token=TURSO_TOKEN)
+    return sqlite3.connect(DB)
+
 
 def init_db():
     global DB, STORAGE_MODE
@@ -20,13 +45,14 @@ def init_db():
         time.sleep(2) 
         
     try:
-        # Create directory if it doesn't exist (e.g. if we are on a fresh /data mount)
-        dir_name = os.path.dirname(DB)
-        if dir_name and not os.path.exists(dir_name):
-            os.makedirs(dir_name, exist_ok=True)
+        # Create directory for local DB if it doesn't exist
+        if not USE_TURSO:
+            dir_name = os.path.dirname(DB)
+            if dir_name and not os.path.exists(dir_name):
+                os.makedirs(dir_name, exist_ok=True)
             
-        print(f"[DB] Attempting to initialize at: {DB}...")
-        conn = sqlite3.connect(DB)
+        print(f"[DB] Attempting to initialize at: {DB_DISPLAY}...")
+        conn = get_db_conn()
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,8 +79,8 @@ def init_db():
         conn.close()
         print(f"[DB] Successfully initialized database.")
     except Exception as e:
-        print(f"[ERROR] Could not initialize database at {DB}: {e}")
-        if DB.startswith("/data"):
+        print(f"[ERROR] Could not initialize database at {DB_DISPLAY}: {e}")
+        if not USE_TURSO and DB.startswith("/data"):
             print(f"[FALLBACK] Switching to ephemeral storage in the local folder.")
             DB = "attendance.db"
             STORAGE_MODE = "Ephemeral (Fallback due to error)"
@@ -66,7 +92,7 @@ def init_db():
 
 
 def save_user(name, rfid, encoding):
-    conn = sqlite3.connect(DB)
+    conn = get_db_conn()
     conn.execute(
         "INSERT INTO users (name, rfid, encoding) VALUES (?, ?, ?)",
         (name, rfid, json.dumps(encoding.tolist()))
@@ -76,21 +102,21 @@ def save_user(name, rfid, encoding):
 
 
 def get_all_users():
-    conn = sqlite3.connect(DB)
+    conn = get_db_conn()
     rows = conn.execute("SELECT name, rfid, encoding FROM users").fetchall()
     conn.close()
     return [(r[0], r[1], np.array(json.loads(r[2]))) for r in rows]
 
 
 def get_all_user_names():
-    conn = sqlite3.connect(DB)
+    conn = get_db_conn()
     rows = conn.execute("SELECT id, name, rfid FROM users").fetchall()
     conn.close()
     return [{"id": r[0], "name": r[1], "rfid": r[2]} for r in rows]
 
 
 def delete_user_by_name(name):
-    conn = sqlite3.connect(DB)
+    conn = get_db_conn()
     cursor = conn.execute("DELETE FROM users WHERE name = ?", (name,))
     deleted = cursor.rowcount
     conn.commit()
@@ -99,7 +125,7 @@ def delete_user_by_name(name):
 
 
 def delete_user_by_id(user_id):
-    conn = sqlite3.connect(DB)
+    conn = get_db_conn()
     cursor = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
     deleted = cursor.rowcount
     conn.commit()
@@ -108,14 +134,14 @@ def delete_user_by_id(user_id):
 
 
 def delete_all_users():
-    conn = sqlite3.connect(DB)
+    conn = get_db_conn()
     conn.execute("DELETE FROM users")
     conn.commit()
     conn.close()
 
 
 def log_attendance(name, rfid):
-    conn = sqlite3.connect(DB)
+    conn = get_db_conn()
     conn.execute(
         "INSERT INTO attendance (name, rfid, status) VALUES (?, ?, 'present')",
         (name, rfid)
@@ -131,7 +157,7 @@ def log_absent_bulk(absent_list: list):
     Skips students who already have an attendance record for today.
     Returns the count of newly inserted absent records.
     """
-    conn = sqlite3.connect(DB)
+    conn = get_db_conn()
     count = 0
     today = __import__('datetime').date.today().isoformat()  # YYYY-MM-DD
     for student in absent_list:
@@ -156,7 +182,7 @@ def log_absent_bulk(absent_list: list):
 
 
 def get_attendance():
-    conn = sqlite3.connect(DB)
+    conn = get_db_conn()
     rows = conn.execute(
         "SELECT name, rfid, status, timestamp FROM attendance ORDER BY timestamp DESC LIMIT 50"
     ).fetchall()
@@ -165,7 +191,7 @@ def get_attendance():
 
 
 def delete_all_attendance():
-    conn = sqlite3.connect(DB)
+    conn = get_db_conn()
     conn.execute("DELETE FROM attendance")
     conn.commit()
     conn.close()
@@ -175,7 +201,7 @@ def log_present_bulk(present_list: list):
     Mark a list of students as present. 
     Uses INSERT OR REPLACE to update status if they were previously marked absent.
     """
-    conn = sqlite3.connect(DB)
+    conn = get_db_conn()
     count = 0
     today = __import__('datetime').date.today().isoformat()
     for student in present_list:
@@ -186,7 +212,7 @@ def log_present_bulk(present_list: list):
         # Use REPLACE to overwrite 'absent' status if it exists
         conn.execute(
             "INSERT OR REPLACE INTO attendance (name, rfid, status, timestamp) "
-            "VALUES (?, ?, 'present', (SELECT timestamp FROM attendance WHERE name = ? AND DATE(timestamp) = ? OR CURRENT_TIMESTAMP))",
+            "VALUES (?, ?, 'present', COALESCE((SELECT timestamp FROM attendance WHERE name = ? AND DATE(timestamp) = ?), CURRENT_TIMESTAMP))",
             (name, rfid, name, today)
         )
         count += 1
