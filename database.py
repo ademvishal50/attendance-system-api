@@ -169,3 +169,27 @@ def delete_all_attendance():
     conn.execute("DELETE FROM attendance")
     conn.commit()
     conn.close()
+
+def log_present_bulk(present_list: list):
+    """
+    Mark a list of students as present. 
+    Uses INSERT OR REPLACE to update status if they were previously marked absent.
+    """
+    conn = sqlite3.connect(DB)
+    count = 0
+    today = __import__('datetime').date.today().isoformat()
+    for student in present_list:
+        name = student.get("name", "").strip()
+        rfid = student.get("rfid", "") or ""
+        if not name: continue
+        
+        # Use REPLACE to overwrite 'absent' status if it exists
+        conn.execute(
+            "INSERT OR REPLACE INTO attendance (name, rfid, status, timestamp) "
+            "VALUES (?, ?, 'present', (SELECT timestamp FROM attendance WHERE name = ? AND DATE(timestamp) = ? OR CURRENT_TIMESTAMP))",
+            (name, rfid, name, today)
+        )
+        count += 1
+    conn.commit()
+    conn.close()
+    return count

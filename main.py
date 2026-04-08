@@ -201,6 +201,25 @@ def bulk_absent(
         "skipped": len(students) - inserted,
         "message": f"{inserted} student(s) marked absent, {len(students) - inserted} already had a record for today."
     }
+@app.post("/attendance/bulk-present")
+def bulk_present(
+    students: List[AbsentStudent],
+    token: str = Depends(verify_token)
+):
+    """
+    Accepts a JSON array of students to be marked present manually.
+    """
+    if not students:
+        raise HTTPException(status_code=400, detail="No students provided")
+
+    present_list = [{"name": s.name, "rfid": s.rfid} for s in students]
+    inserted = database.log_present_bulk(present_list)
+
+    return {
+        "status": "success",
+        "total_received": len(students),
+        "newly_marked_present": inserted
+    }
 
 # ─── Delete by name ──────────────────────────────────────────
 @app.delete("/delete/name/{name}")
