@@ -57,7 +57,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS users (
                 id       INTEGER PRIMARY KEY AUTOINCREMENT,
                 name     TEXT,
-                rfid     TEXT,
+                rfid     TEXT UNIQUE,
                 encoding TEXT
             )
         """)
@@ -93,12 +93,22 @@ def init_db():
 
 def save_user(name, rfid, encoding):
     conn = get_db_conn()
+    # Use INSERT OR REPLACE to update existing RFID records
     conn.execute(
-        "INSERT INTO users (name, rfid, encoding) VALUES (?, ?, ?)",
+        "INSERT OR REPLACE INTO users (name, rfid, encoding) VALUES (?, ?, ?)",
         (name, rfid, json.dumps(encoding.tolist()))
     )
     conn.commit()
     conn.close()
+
+
+def get_user_by_rfid(rfid):
+    conn = get_db_conn()
+    row = conn.execute("SELECT name, rfid, encoding FROM users WHERE rfid = ?", (rfid,)).fetchone()
+    conn.close()
+    if row:
+        return (row[0], row[1], np.array(json.loads(row[2])))
+    return None
 
 
 def get_all_users():

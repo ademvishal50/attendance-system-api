@@ -88,7 +88,24 @@ async def register(
     if len(encodings) > 1:
         raise HTTPException(status_code=400, detail="Multiple faces detected. Upload a photo with only one face.")
 
-    database.save_user(name, rfid, encodings[0])
+    # Check if RFID already exists to provide a better error message
+    existing_user = database.get_user_by_rfid(rfid)
+    if existing_user:
+        existing_name = existing_user[0]
+        if existing_name != name:
+             raise HTTPException(
+                status_code=400, 
+                detail=f"RFID {rfid} is already assigned to {existing_name}. Please use a different RFID."
+            )
+        # If it's the same name, we treat it as an update (re-enrolling)
+        print(f"[REGISTER] Updating existing user: {name}")
+
+    try:
+        database.save_user(name, rfid, encodings[0])
+    except Exception as e:
+        print(f"[ERROR] Database error during registration: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
     return {"status": "success", "message": f"{name} registered successfully"}
 
 # ─── Verify ──────────────────────────────────────────────────
