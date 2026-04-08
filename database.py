@@ -13,7 +13,6 @@ if not URL or not TOKEN:
 def get_client():
     return libsql.connect(URL, auth_token=TOKEN)
 
-
 def init_db():
     try:
         with get_client() as conn:
@@ -60,11 +59,16 @@ def get_attendance():
         rows = res.fetchall()
         return [{"name": row[0], "rfid": row[1], "time": row[2]} for row in rows]
 
+def delete_user_by_name(name):
+    with get_client() as conn:
+        res = conn.execute("DELETE FROM users WHERE name = ?", (name,))
+        conn.commit()
+        return res.rowcount
+
 def delete_user_by_id(user_id):
     with get_client() as conn:
         res = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
-        # In libsql, we can get affected rows from the cursor
         return res.rowcount
 
 def delete_all_users():
@@ -76,3 +80,18 @@ def delete_all_attendance():
     with get_client() as conn:
         conn.execute("DELETE FROM attendance")
         conn.commit()
+
+def get_debug_users():
+    with get_client() as conn:
+        res = conn.execute("SELECT id, name, rfid, encoding FROM users")
+        rows = res.fetchall()
+        return [
+            {
+                "id": r[0],
+                "name": r[1],
+                "rfid": r[2],
+                "encoding_length": len(json.loads(r[3])),
+                "encoding_preview": json.loads(r[3])[:5]
+            }
+            for r in rows
+        ]
