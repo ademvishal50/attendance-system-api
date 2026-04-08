@@ -10,16 +10,19 @@ import json
 import database
 import numpy as np
 import cv2
+import io
+try:
+    import face_recognition
+    HAS_FACE_REC = True
+except ImportError:
+    HAS_FACE_REC = False
+
 
 app = FastAPI(title="Attendance API")
 database.init_db()
 
-# ─── Configuration ───────────────────────────────────────────
 THRESHOLD = 0.4
-# External Face Recognition API URL (defaults to a generic placeholder if not set)
-RECOGNITION_API_URL = os.environ.get("RECOGNITION_API_URL", "")
-# Token for the external API if needed
-RECOGNITION_API_TOKEN = os.environ.get("RECOGNITION_API_TOKEN", "")
+
 # ──────────────────────────────────────────────────────────────
 
 # ─── Bearer Token Security ────────────────────────────────────
@@ -39,33 +42,7 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         )
     return credentials.credentials
 
-async def get_encoding_from_api(image_bytes: bytes):
-    """Sends image to external API to get face encodings."""
-    if not RECOGNITION_API_URL:
-        raise HTTPException(
-            status_code=500,
-            detail="RECOGNITION_API_URL is not configured in environment variables."
-        )
-    
-    try:
-        # Assuming the API takes an 'image' file field
-        files = {"image": ("image.jpg", image_bytes, "image/jpeg")}
-        headers = {}
-        if RECOGNITION_API_TOKEN:
-            headers["Authorization"] = f"Bearer {RECOGNITION_API_TOKEN}"
-            
-        response = requests.post(RECOGNITION_API_URL, files=files, headers=headers, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        
-        # Most APIs return a list of encodings: {"encodings": [[...]]}
-        encodings = data.get("encodings", [])
-        return [np.array(e) for e in encodings]
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error calling Face Recognition API: {str(e)}"
-        )
+# ──────────────────────────────────────────────────────────────
 
 # ─── Health Check (public - no token needed) ─────────────────
 @app.get("/")
@@ -80,15 +57,10 @@ def root():
         "database": {
             "type": "Turso (Remote)" if is_turso else "SQLite (Local)",
             "mode": db_mode,
-            "target": getattr(database, "DB_DISPLAY", "Unknown"),
-            "has_libsql": getattr(database, "HAS_LIBSQL", False)
+            "target": getattr(database, "DB_DISPLAY", "Unknown")
         },
-        "recognition_api": {
-            "url": RECOGNITION_API_URL or "NOT_CONFIGURED",
-            "status": "Ready" if RECOGNITION_API_URL else "Missing environment variable RECOGNITION_API_URL"
-        },
-        "environment": "Production (Render)" if is_turso else "Local/Development",
-        "instruction": "Ensure TURSO_URL, TURSO_TOKEN, and RECOGNITION_API_URL are set in environment variables."
+        "recognition": "Local (processing on Render server)",
+        "environment": "Production (Render)" if is_turso else "Local/Development"
     }
 
 
@@ -103,8 +75,12 @@ async def register(
 ):
     img_bytes = await image.read()
     
-    # Get encodings from API instead of local library
-    encodings = await get_encoding_from_api(img_bytes)
+    if not HAS_FACE_REC:
+        raise HTTPException(status_code=500, detail="face_recognition library not installed.")
+
+    # Local processing
+    img = face_recognition.load_image_file(io.BytesIO(img_bytes))
+    encodings = face_recognition.face_encodings(img)
 
     if not encodings:
         raise HTTPException(status_code=400, detail="No face detected in the uploaded photo.")
@@ -124,8 +100,12 @@ async def verify(
 ):
     img_bytes = await image.read()
     
-    # Get encodings from API instead of local library
-    encodings = await get_encoding_from_api(img_bytes)
+    if not HAS_FACE_REC:
+        raise HTTPException(status_code=500, detail="face_recognition library not installed.")
+
+    # Local processing
+    img = face_recognition.load_image_file(io.BytesIO(img_bytes))
+    encodings = face_recognition.face_encodings(img)
 
     if not encodings:
         raise HTTPException(status_code=400, detail="No face detected in image")
