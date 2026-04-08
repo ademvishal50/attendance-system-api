@@ -3,12 +3,16 @@ import json
 import numpy as np
 import libsql
 
-# Direct connection for stability
-URL = "https://attendance-db-ademvishal50.aws-ap-south-1.turso.io"
-TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzU1NzQ1NDIsImlkIjoiMDE5ZDY4N2MtY2UwMS03YjFmLTg3NzgtNDMzZDQ2MzhlYzhmIiwicmlkIjoiYzEyNTM5MDgtOGJiYS00YTk2LWI4N2MtNDZlZTFiMzk0NzQ4In0.HRQ6V4vp2GwL5bFd3WgVD8NFotsvTpi2aqMWBNX9GCRhnfMccKkizgOOFtLSmIw5IxXOny28MyqkJggwi9sXBg"
+# Using Environment Variables for Security
+URL = os.environ.get("TURSO_URL")
+TOKEN = os.environ.get("TURSO_TOKEN")
+
+if not URL or not TOKEN:
+    print("WARNING: TURSO_URL or TURSO_TOKEN environment variables are not set!")
 
 def get_client():
     return libsql.connect(URL, auth_token=TOKEN)
+
 
 def init_db():
     try:
