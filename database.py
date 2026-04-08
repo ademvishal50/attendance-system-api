@@ -153,29 +153,33 @@ def log_attendance(name, rfid):
 def log_absent_bulk(absent_list: list):
     """
     Insert absent records for a list of students.
-    Each item in absent_list should be a dict with 'name' and optionally 'rfid'.
-    Skips students who already have an attendance record for today.
-    Returns the count of newly inserted absent records.
+    Allows overwriting an existing status (e.g., changing 'present' to 'absent').
     """
     conn = get_db_conn()
+    cursor = conn.cursor()
     count = 0
-    today = __import__('datetime').date.today().isoformat()  # YYYY-MM-DD
+    from datetime import datetime, timezone
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    
     for student in absent_list:
         name = student.get("name", "").strip()
         rfid = student.get("rfid", "") or ""
         if not name:
             continue
-        # Only insert if no record already exists for today
-        existing = conn.execute(
-            "SELECT id FROM attendance WHERE name = ? AND DATE(timestamp) = ?",
-            (name, today)
-        ).fetchone()
-        if not existing:
-            conn.execute(
-                "INSERT INTO attendance (name, rfid, status) VALUES (?, ?, 'absent')",
-                (name, rfid)
+            
+        # Use INSERT OR REPLACE to update status to 'absent' if a record already exists
+        # We also try to keep the original timestamp if possible
+        cursor.execute("""
+            INSERT OR REPLACE INTO attendance (id, name, rfid, status, timestamp)
+            VALUES (
+                (SELECT id FROM attendance WHERE name = ? AND DATE(timestamp) = ?),
+                ?, ?, 'absent', 
+                (SELECT timestamp FROM attendance WHERE name = ? AND DATE(timestamp) = ? OR CURRENT_TIMESTAMP)
             )
-            count += 1
+        """, (name, today, name, rfid, name, today))
+        
+        count += 1
+            
     conn.commit()
     conn.close()
     return count
@@ -199,23 +203,43 @@ def delete_all_attendance():
 def log_present_bulk(present_list: list):
     """
     Mark a list of students as present. 
-    Uses INSERT OR REPLACE to update status if they were previously marked absent.
+    If they were previously marked absent today, this will update their record to 'present'.
     """
     conn = get_db_conn()
+    cursor = conn.cursor()
     count = 0
-    today = __import__('datetime').date.today().isoformat()
+    from datetime import datetime, timezone
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    
+    print(f"[DB] Bulk Present: Processing {len(present_list)} students")
+
     for student in present_list:
         name = student.get("name", "").strip()
         rfid = student.get("rfid", "") or ""
         if not name: continue
         
-        # Use REPLACE to overwrite 'absent' status if it exists
-        conn.execute(
-            "INSERT OR REPLACE INTO attendance (name, rfid, status, timestamp) "
-            "VALUES (?, ?, 'present', COALESCE((SELECT timestamp FROM attendance WHERE name = ? AND DATE(timestamp) = ?), CURRENT_TIMESTAMP))",
-            (name, rfid, name, today)
-        )
+        # Check if a record already exists for today
+        existing = cursor.execute(
+            "SELECT id FROM attendance WHERE name = ? AND DATE(timestamp) = ?",
+            (name, today)
+        ).fetchone()
+        
+        if existing:
+            # Update existing record (e.g. from 'absent' to 'present')
+            cursor.execute(
+                "UPDATE attendance SET status = 'present', rfid = ? WHERE id = ?",
+                (rfid, existing[0])
+            )
+            print(f"[DB]   - Updated to PRESENT: {name}")
+        else:
+            # Create new record
+            cursor.execute(
+                "INSERT INTO attendance (name, rfid, status) VALUES (?, ?, 'present')",
+                (name, rfid)
+            )
+            print(f"[DB]   - Marked PRESENT (new): {name}")
         count += 1
+        
     conn.commit()
     conn.close()
     return count
