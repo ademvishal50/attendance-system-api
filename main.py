@@ -21,7 +21,7 @@ except ImportError:
 app = FastAPI(title="Attendance API")
 database.init_db()
 
-THRESHOLD = 0.4
+THRESHOLD = float(os.environ.get("THRESHOLD", 0.4))
 
 # ──────────────────────────────────────────────────────────────
 
@@ -59,7 +59,7 @@ def root():
             "mode": db_mode,
             "target": getattr(database, "DB_DISPLAY", "Unknown")
         },
-        "recognition": "Local (processing on Render server)",
+        "recognition": f"Local (Threshold: {THRESHOLD})",
         "environment": "Production (Render)" if is_turso else "Local/Development"
     }
 
